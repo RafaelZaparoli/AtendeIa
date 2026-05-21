@@ -6,6 +6,7 @@ import { getSupabaseClient, type Company } from "@/lib/supabaseClient";
 
 type CompanyForm = {
   name: string;
+  slug: string;
   servicesAndPrices: string;
   businessHours: string;
   address: string;
@@ -20,6 +21,7 @@ type CompanyForm = {
 
 const initialForm: CompanyForm = {
   name: "Clara Studio de Beleza",
+  slug: "clara-studio-de-beleza",
   servicesAndPrices: "Corte feminino R$ 90; Escova R$ 70; Manicure R$ 45",
   businessHours: "Segunda a sexta, 9h as 19h. Sabado, 9h as 14h.",
   address: "Rua das Flores, 120 - Centro",
@@ -39,6 +41,7 @@ const fields: Array<{
   textarea?: boolean;
 }> = [
   { id: "name", label: "Nome da empresa" },
+  { id: "slug", label: "Slug do link publico" },
   { id: "servicesAndPrices", label: "Servicos e precos", textarea: true },
   { id: "businessHours", label: "Horario de funcionamento" },
   { id: "address", label: "Endereco" },
@@ -65,6 +68,16 @@ function buildBusinessInfo(form: CompanyForm) {
   ].join("\n");
 }
 
+function createSlug(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
 function readBusinessInfoValue(businessInfo: string, label: string) {
   const normalizedLabel = label.toLowerCase();
   const line = businessInfo
@@ -77,6 +90,7 @@ function readBusinessInfoValue(businessInfo: string, label: string) {
 function buildFormFromCompany(company: Company): CompanyForm {
   return {
     name: company.name || initialForm.name,
+    slug: company.slug || createSlug(company.name) || initialForm.slug,
     servicesAndPrices:
       readBusinessInfoValue(company.business_info, "Servicos e precos") ||
       initialForm.servicesAndPrices,
@@ -108,12 +122,15 @@ function buildFormFromCompany(company: Company): CompanyForm {
 
 export default function ConfiguracoesPage() {
   const [form, setForm] = useState<CompanyForm>(initialForm);
+  const [isSlugEdited, setIsSlugEdited] = useState(false);
   const [loadedCompanyId, setLoadedCompanyId] = useState<string | null>(null);
   const [isLoadingCompany, setIsLoadingCompany] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [savedCompanyId, setSavedCompanyId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [publicLink, setPublicLink] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
 
   function updateField(field: keyof CompanyForm, value: string) {
     setForm((currentForm) => ({
@@ -122,13 +139,44 @@ export default function ConfiguracoesPage() {
     }));
   }
 
+  function updateName(value: string) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      name: value,
+      slug: isSlugEdited ? currentForm.slug : createSlug(value)
+    }));
+  }
+
+  function updateSlug(value: string) {
+    setIsSlugEdited(true);
+    updateField("slug", createSlug(value));
+  }
+
+  async function copyPublicLink() {
+    try {
+      await navigator.clipboard.writeText(publicLink);
+      setCopyMessage("Link copiado.");
+    } catch {
+      setCopyMessage("Nao foi possivel copiar o link.");
+    }
+  }
+
+  useEffect(() => {
+    if (!form.slug) {
+      setPublicLink("");
+      return;
+    }
+
+    setPublicLink(`${window.location.origin}/chat/${form.slug}`);
+  }, [form.slug]);
+
   useEffect(() => {
     async function loadLatestCompany() {
       try {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase
           .from("companies")
-          .select("id, name, business_info, city, state, tone, whatsapp, created_at")
+          .select("id, name, slug, business_info, city, state, tone, whatsapp, created_at")
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -140,6 +188,7 @@ export default function ConfiguracoesPage() {
         if (data) {
           setLoadedCompanyId(data.id);
           setSavedCompanyId(data.id);
+          setIsSlugEdited(Boolean(data.slug));
           setForm(buildFormFromCompany(data));
         }
       } catch (error) {
@@ -168,10 +217,15 @@ export default function ConfiguracoesPage() {
         throw new Error("Informe o nome da empresa antes de salvar.");
       }
 
+      if (!form.slug.trim()) {
+        throw new Error("Informe o slug do link publico antes de salvar.");
+      }
+
       const supabase = getSupabaseClient();
       const businessInfo = buildBusinessInfo(form);
       const payload = {
         name: form.name.trim(),
+        slug: createSlug(form.slug),
         business_info: businessInfo,
         city: form.city.trim(),
         state: form.state.trim(),
@@ -238,7 +292,19 @@ export default function ConfiguracoesPage() {
                 <input
                   id={field.id}
                   value={form[field.id]}
-                  onChange={(event) => updateField(field.id, event.target.value)}
+                  onChange={(event) => {
+                    if (field.id === "name") {
+                      updateName(event.target.value);
+                      return;
+                    }
+
+                    if (field.id === "slug") {
+                      updateSlug(event.target.value);
+                      return;
+                    }
+
+                    updateField(field.id, event.target.value);
+                  }}
                   className="mt-2 w-full rounded-md border border-ink/10 bg-cloud px-4 py-3 text-sm outline-none transition focus:border-moss focus:bg-white"
                 />
               )}
@@ -266,6 +332,37 @@ export default function ConfiguracoesPage() {
                 <p className="mt-2 break-all font-mono text-sm font-bold text-ink">
                   {savedCompanyId}
                 </p>
+              </div>
+            )}
+            {savedCompanyId && (
+              <div className="rounded-lg border border-ink/10 bg-white px-4 py-4 shadow-sm">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-coral">
+                  Link público do assistente
+                </p>
+                <p className="mt-2 text-sm leading-6 text-ink/60">
+                  Envie este link para seus clientes ou coloque na bio do Instagram.
+                </p>
+                {publicLink ? (
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <p className="min-w-0 flex-1 break-all rounded-md bg-cloud px-4 py-3 font-mono text-sm font-bold text-ink">
+                      {publicLink}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={copyPublicLink}
+                      className="min-h-11 rounded-md bg-ink px-4 text-sm font-semibold text-white transition hover:bg-moss"
+                    >
+                      Copiar link
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-md border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-ink">
+                    Preencha o slug para gerar o link público.
+                  </p>
+                )}
+                {copyMessage && (
+                  <p className="mt-3 text-sm font-semibold text-moss">{copyMessage}</p>
+                )}
               </div>
             )}
           </div>

@@ -12,7 +12,7 @@ export function LatestCompanyCard() {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase
           .from("companies")
-          .select("id, name, business_info, city, state, tone, whatsapp, created_at")
+          .select("id, name, slug, business_info, city, state, tone, whatsapp, created_at")
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -42,6 +42,9 @@ export function LatestCompanyCard() {
       <p className="mt-2 font-black text-ink">{company.name}</p>
       <p className="mt-1 text-sm font-semibold text-ink/60">
         {[company.city, company.state].filter(Boolean).join(" - ")}
+      </p>
+      <p className="mt-2 break-all font-mono text-xs font-bold text-ink/50">
+        /chat/{company.slug}
       </p>
     </div>
   );

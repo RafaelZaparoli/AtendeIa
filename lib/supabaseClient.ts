@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 export type Company = {
   id: string;
   name: string;
+  slug: string;
   business_info: string;
   city: string | null;
   state: string | null;

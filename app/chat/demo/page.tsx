@@ -45,6 +45,12 @@ const suggestions = [
   "Qual o endereço?"
 ];
 
+type ChatExperienceProps = {
+  fixedCompanyId?: string;
+  companyName?: string;
+  companyLocation?: string;
+};
+
 function getCurrentTime() {
   return new Intl.DateTimeFormat("pt-BR", {
     hour: "2-digit",
@@ -74,10 +80,26 @@ function extractWhatsapp(text: string) {
   };
 }
 
-export default function ChatDemoPage() {
-  const [companyId, setCompanyId] = useState("");
+export function ChatExperience({
+  fixedCompanyId,
+  companyName,
+  companyLocation
+}: ChatExperienceProps) {
+  const isPublicCompanyChat = Boolean(fixedCompanyId);
+  const [companyId, setCompanyId] = useState(fixedCompanyId || "");
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    isPublicCompanyChat
+      ? [
+          {
+            id: "welcome",
+            author: "AtendeAI",
+            time: "Agora",
+            text: `Ola! Como posso ajudar com o atendimento de ${companyName || "esta empresa"}?`
+          }
+        ]
+      : initialMessages
+  );
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isAppointmentOpen, setIsAppointmentOpen] = useState(false);
@@ -368,14 +390,17 @@ export default function ChatDemoPage() {
       <section className="mx-auto flex max-w-5xl flex-col px-5 py-8">
         <div className="mb-5">
           <p className="text-sm font-bold uppercase tracking-[0.18em] text-coral">
-            Chat demo
+            {isPublicCompanyChat ? "Atendimento" : "Chat demo"}
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight">
-            Simulacao de atendimento
+            {isPublicCompanyChat
+              ? companyName || "Atendimento da empresa"
+              : "Simulacao de atendimento"}
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/60">
-            Use o ID exibido apos salvar a empresa em configuracoes para testar
-            respostas baseadas no cadastro.
+            {isPublicCompanyChat
+              ? companyLocation || "Envie uma mensagem para comecar o atendimento."
+              : "Use o ID exibido apos salvar a empresa em configuracoes para testar respostas baseadas no cadastro."}
           </p>
         </div>
 
@@ -383,7 +408,9 @@ export default function ChatDemoPage() {
           <div className="flex flex-col gap-4 border-b border-ink/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="font-black">Cliente via WhatsApp</p>
-              <p className="text-sm text-ink/55">Atendimento conectado a API</p>
+              <p className="text-sm text-ink/55">
+                {companyName || "Atendimento conectado a API"}
+              </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <button
@@ -408,23 +435,25 @@ export default function ChatDemoPage() {
                 </a>
               )}
               <span className="w-fit rounded-full bg-mint px-3 py-1 text-xs font-bold text-moss">
-                Demo
+                {isPublicCompanyChat ? "Online" : "Demo"}
               </span>
             </div>
           </div>
 
-          <div className="border-b border-ink/10 bg-white px-4 py-4 md:px-8">
-            <label htmlFor="companyId" className="text-sm font-bold text-ink/70">
-              ID da empresa
-            </label>
-            <input
-              id="companyId"
-              value={companyId}
-              onChange={(event) => setCompanyId(event.target.value)}
-              placeholder="Cole aqui o UUID da empresa salva"
-              className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
-            />
-          </div>
+          {!isPublicCompanyChat && (
+            <div className="border-b border-ink/10 bg-white px-4 py-4 md:px-8">
+              <label htmlFor="companyId" className="text-sm font-bold text-ink/70">
+                ID da empresa
+              </label>
+              <input
+                id="companyId"
+                value={companyId}
+                onChange={(event) => setCompanyId(event.target.value)}
+                placeholder="Cole aqui o UUID da empresa salva"
+                className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
+              />
+            </div>
+          )}
 
           <div className="min-h-[480px] space-y-4 bg-cloud px-4 py-5 md:px-8">
             {messages.map((message) => {
@@ -667,4 +696,8 @@ export default function ChatDemoPage() {
       )}
     </main>
   );
+}
+
+export default function ChatDemoPage() {
+  return <ChatExperience />;
 }
