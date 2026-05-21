@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
     if (occupiedAppointments.length > 0) {
       return buildErrorResponse(
-        "Este horario nao esta mais disponivel. Escolha outro horario.",
+        "Este horário já está indisponível. Escolha outro horário.",
         409
       );
     }

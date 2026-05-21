@@ -14,8 +14,6 @@ type AppointmentForm = {
   customerName: string;
   customerPhone: string;
   service: string;
-  appointmentDate: string;
-  appointmentTime: string;
   notes: string;
 };
 
@@ -28,8 +26,6 @@ const initialAppointmentForm: AppointmentForm = {
   customerName: "",
   customerPhone: "",
   service: "",
-  appointmentDate: "",
-  appointmentTime: "",
   notes: ""
 };
 
@@ -88,9 +84,11 @@ export default function ChatDemoPage() {
   const [appointmentForm, setAppointmentForm] = useState<AppointmentForm>(
     initialAppointmentForm
   );
+  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedTime, setSelectedTime] = useState("");
   const [isScheduling, setIsScheduling] = useState(false);
-  const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
-  const [availabilityTimes, setAvailabilityTimes] = useState<AvailabilityTime[]>([]);
+  const [loadingTimes, setLoadingTimes] = useState(false);
+  const [timeSlots, setTimeSlots] = useState<AvailabilityTime[]>([]);
   const [availabilityError, setAvailabilityError] = useState("");
   const [appointmentMessage, setAppointmentMessage] = useState("");
   const [appointmentError, setAppointmentError] = useState("");
@@ -109,26 +107,26 @@ export default function ChatDemoPage() {
     return null;
   }, [messages]);
 
-  const selectedAvailability = availabilityTimes.find(
-    (slot) => slot.time === appointmentForm.appointmentTime
+  const selectedAvailability = timeSlots.find(
+    (slot) => slot.time === selectedTime
   );
-  const hasAvailableAppointmentTime = availabilityTimes.some(
+  const hasAvailableAppointmentTime = timeSlots.some(
     (slot) => slot.available
   );
   const canSubmitAppointment =
     Boolean(appointmentForm.customerName.trim()) &&
     Boolean(appointmentForm.customerPhone.trim()) &&
     Boolean(appointmentForm.service.trim()) &&
-    Boolean(appointmentForm.appointmentDate) &&
+    Boolean(selectedDate) &&
     Boolean(selectedAvailability?.available) &&
     !isScheduling;
 
   useEffect(() => {
     async function loadAvailability() {
       const trimmedCompanyId = companyId.trim();
-      const date = appointmentForm.appointmentDate;
+      const date = selectedDate;
 
-      setAvailabilityTimes([]);
+      setTimeSlots([]);
       setAvailabilityError("");
 
       if (!isAppointmentOpen || !date) {
@@ -140,7 +138,7 @@ export default function ChatDemoPage() {
         return;
       }
 
-      setIsLoadingAvailability(true);
+      setLoadingTimes(true);
 
       try {
         const response = await fetch(
@@ -157,7 +155,7 @@ export default function ChatDemoPage() {
           throw new Error(data.error || "Nao foi possivel carregar os horarios.");
         }
 
-        setAvailabilityTimes(data.times || []);
+        setTimeSlots(data.times || []);
       } catch (error) {
         const friendlyMessage =
           error instanceof Error
@@ -165,12 +163,12 @@ export default function ChatDemoPage() {
             : "Nao foi possivel carregar a disponibilidade.";
         setAvailabilityError(friendlyMessage);
       } finally {
-        setIsLoadingAvailability(false);
+        setLoadingTimes(false);
       }
     }
 
     loadAvailability();
-  }, [appointmentForm.appointmentDate, companyId, isAppointmentOpen]);
+  }, [companyId, isAppointmentOpen, selectedDate]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -268,6 +266,26 @@ export default function ChatDemoPage() {
       return;
     }
 
+    if (!appointmentForm.customerName.trim()) {
+      setAppointmentError("Informe o nome para solicitar o agendamento.");
+      return;
+    }
+
+    if (!appointmentForm.customerPhone.trim()) {
+      setAppointmentError("Informe o telefone para solicitar o agendamento.");
+      return;
+    }
+
+    if (!appointmentForm.service.trim()) {
+      setAppointmentError("Informe o servico desejado.");
+      return;
+    }
+
+    if (!selectedDate) {
+      setAppointmentError("Escolha uma data para solicitar o agendamento.");
+      return;
+    }
+
     if (!selectedAvailability?.available) {
       setAppointmentError("Escolha um horario disponivel antes de solicitar.");
       return;
@@ -288,8 +306,8 @@ export default function ChatDemoPage() {
           customerName: appointmentForm.customerName,
           customerPhone: appointmentForm.customerPhone,
           service: appointmentForm.service,
-          appointmentDate: appointmentForm.appointmentDate,
-          appointmentTime: appointmentForm.appointmentTime,
+          appointmentDate: selectedDate,
+          appointmentTime: selectedTime,
           notes: appointmentForm.notes
         })
       });
@@ -308,7 +326,9 @@ export default function ChatDemoPage() {
 
       setAppointmentMessage(successMessage);
       setAppointmentForm(initialAppointmentForm);
-      setAvailabilityTimes([]);
+      setSelectedDate("");
+      setSelectedTime("");
+      setTimeSlots([]);
       setMessages((currentMessages) => [
         ...currentMessages,
         {
@@ -535,53 +555,50 @@ export default function ChatDemoPage() {
                   <span className="text-sm font-bold text-ink/70">Data</span>
                   <input
                     type="date"
-                    value={appointmentForm.appointmentDate}
+                    value={selectedDate}
                     onChange={(event) => {
-                      updateAppointmentField("appointmentDate", event.target.value);
-                      updateAppointmentField("appointmentTime", "");
+                      setSelectedDate(event.target.value);
+                      setSelectedTime("");
                     }}
                     className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
                   />
                 </label>
                 <div className="sm:col-span-2">
                   <p className="text-sm font-bold text-ink/70">Horários</p>
-                  {!appointmentForm.appointmentDate && (
+                  {!selectedDate && (
                     <p className="mt-2 rounded-md bg-cloud px-4 py-3 text-sm text-ink/55">
                       Escolha uma data para ver os horários disponíveis.
                     </p>
                   )}
-                  {isLoadingAvailability && (
+                  {loadingTimes && (
                     <p className="mt-2 rounded-md bg-cloud px-4 py-3 text-sm font-semibold text-ink/60">
                       Carregando horários...
                     </p>
                   )}
-                  {availabilityError && !isLoadingAvailability && (
+                  {availabilityError && !loadingTimes && (
                     <p className="mt-2 rounded-md border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-ink">
                       {availabilityError}
                     </p>
                   )}
-                  {availabilityTimes.length > 0 &&
+                  {timeSlots.length > 0 &&
                     !hasAvailableAppointmentTime &&
-                    !isLoadingAvailability &&
+                    !loadingTimes &&
                     !availabilityError && (
                       <p className="mt-2 rounded-md border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-ink">
                         Não há horários disponíveis para esta data. Escolha outro dia.
                       </p>
                     )}
-                  {availabilityTimes.length > 0 && !isLoadingAvailability && (
+                  {timeSlots.length > 0 && !loadingTimes && (
                     <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {availabilityTimes.map((slot) => {
-                        const isSelected =
-                          appointmentForm.appointmentTime === slot.time;
+                      {timeSlots.map((slot) => {
+                        const isSelected = selectedTime === slot.time;
 
                         return (
                           <button
                             key={slot.time}
                             type="button"
                             disabled={!slot.available}
-                            onClick={() =>
-                              updateAppointmentField("appointmentTime", slot.time)
-                            }
+                            onClick={() => setSelectedTime(slot.time)}
                             className={`min-h-14 rounded-md border px-3 py-2 text-left text-sm font-bold transition ${
                               slot.available
                                 ? isSelected
