@@ -228,7 +228,7 @@ export default function ChatDemoPage() {
       }
 
       const successMessage =
-        "Agendamento solicitado com sucesso. A empresa entrara em contato para confirmar.";
+        "Solicitação de agendamento enviada. A empresa entrará em contato para confirmar.";
 
       setAppointmentMessage(successMessage);
       setAppointmentForm(initialAppointmentForm);
