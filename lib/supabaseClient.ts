@@ -4,6 +4,8 @@ export type Company = {
   id: string;
   name: string;
   business_info: string;
+  city: string | null;
+  state: string | null;
   tone: string | null;
   whatsapp: string | null;
   created_at: string;
@@ -14,6 +16,19 @@ export type Conversation = {
   company_id: string;
   customer_message: string;
   ai_response: string;
+  created_at: string;
+};
+
+export type Appointment = {
+  id: string;
+  company_id: string;
+  customer_name: string;
+  customer_phone: string;
+  service: string;
+  appointment_date: string;
+  appointment_time: string;
+  notes: string | null;
+  status: "pendente" | "confirmado" | "cancelado";
   created_at: string;
 };
 
@@ -36,6 +51,15 @@ type Database = {
           created_at?: string;
         };
         Update: Partial<Omit<Conversation, "id" | "created_at">>;
+        Relationships: [];
+      };
+      appointments: {
+        Row: Appointment;
+        Insert: Omit<Appointment, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Omit<Appointment, "id" | "created_at">>;
         Relationships: [];
       };
     };

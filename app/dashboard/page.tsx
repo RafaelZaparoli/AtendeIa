@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { LatestCompanyCard } from "@/components/LatestCompanyCard";
 import { StatCard } from "@/components/StatCard";
 
 const quickLinks = [
@@ -64,6 +65,7 @@ export default function DashboardPage() {
               </Link>
             ))}
           </div>
+          <LatestCompanyCard />
         </div>
       </section>
     </DashboardLayout>

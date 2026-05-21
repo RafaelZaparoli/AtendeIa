@@ -1,14 +1,16 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { getSupabaseClient } from "@/lib/supabaseClient";
+import { getSupabaseClient, type Company } from "@/lib/supabaseClient";
 
 type CompanyForm = {
   name: string;
   servicesAndPrices: string;
   businessHours: string;
   address: string;
+  city: string;
+  state: string;
   paymentMethods: string;
   faqs: string;
   importantRules: string;
@@ -21,6 +23,8 @@ const initialForm: CompanyForm = {
   servicesAndPrices: "Corte feminino R$ 90; Escova R$ 70; Manicure R$ 45",
   businessHours: "Segunda a sexta, 9h as 19h. Sabado, 9h as 14h.",
   address: "Rua das Flores, 120 - Centro",
+  city: "Sao Paulo",
+  state: "SP",
   paymentMethods: "Pix, dinheiro, cartao de debito e credito",
   faqs: "Precisa agendar? Sim. Atende criancas? Sim, a partir de 8 anos.",
   importantRules:
@@ -38,6 +42,8 @@ const fields: Array<{
   { id: "servicesAndPrices", label: "Servicos e precos", textarea: true },
   { id: "businessHours", label: "Horario de funcionamento" },
   { id: "address", label: "Endereco" },
+  { id: "city", label: "Cidade" },
+  { id: "state", label: "Estado" },
   { id: "paymentMethods", label: "Formas de pagamento" },
   { id: "faqs", label: "Perguntas frequentes", textarea: true },
   { id: "importantRules", label: "Regras importantes", textarea: true },
@@ -51,14 +57,59 @@ function buildBusinessInfo(form: CompanyForm) {
     `Servicos e precos: ${form.servicesAndPrices}`,
     `Horario de funcionamento: ${form.businessHours}`,
     `Endereco: ${form.address}`,
+    `Cidade: ${form.city}`,
+    `Estado: ${form.state}`,
     `Formas de pagamento: ${form.paymentMethods}`,
     `Perguntas frequentes: ${form.faqs}`,
     `Regras importantes: ${form.importantRules}`
   ].join("\n");
 }
 
+function readBusinessInfoValue(businessInfo: string, label: string) {
+  const normalizedLabel = label.toLowerCase();
+  const line = businessInfo
+    .split("\n")
+    .find((item) => item.toLowerCase().startsWith(`${normalizedLabel}:`));
+
+  return line?.split(":").slice(1).join(":").trim() || "";
+}
+
+function buildFormFromCompany(company: Company): CompanyForm {
+  return {
+    name: company.name || initialForm.name,
+    servicesAndPrices:
+      readBusinessInfoValue(company.business_info, "Servicos e precos") ||
+      initialForm.servicesAndPrices,
+    businessHours:
+      readBusinessInfoValue(company.business_info, "Horario de funcionamento") ||
+      initialForm.businessHours,
+    address: readBusinessInfoValue(company.business_info, "Endereco") || initialForm.address,
+    city:
+      company.city ||
+      readBusinessInfoValue(company.business_info, "Cidade") ||
+      initialForm.city,
+    state:
+      company.state ||
+      readBusinessInfoValue(company.business_info, "Estado") ||
+      initialForm.state,
+    paymentMethods:
+      readBusinessInfoValue(company.business_info, "Formas de pagamento") ||
+      initialForm.paymentMethods,
+    faqs:
+      readBusinessInfoValue(company.business_info, "Perguntas frequentes") ||
+      initialForm.faqs,
+    importantRules:
+      readBusinessInfoValue(company.business_info, "Regras importantes") ||
+      initialForm.importantRules,
+    tone: company.tone || initialForm.tone,
+    whatsapp: company.whatsapp || initialForm.whatsapp
+  };
+}
+
 export default function ConfiguracoesPage() {
   const [form, setForm] = useState<CompanyForm>(initialForm);
+  const [loadedCompanyId, setLoadedCompanyId] = useState<string | null>(null);
+  const [isLoadingCompany, setIsLoadingCompany] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [savedCompanyId, setSavedCompanyId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState("");
@@ -70,6 +121,40 @@ export default function ConfiguracoesPage() {
       [field]: value
     }));
   }
+
+  useEffect(() => {
+    async function loadLatestCompany() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase
+          .from("companies")
+          .select("id, name, business_info, city, state, tone, whatsapp, created_at")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          throw error;
+        }
+
+        if (data) {
+          setLoadedCompanyId(data.id);
+          setSavedCompanyId(data.id);
+          setForm(buildFormFromCompany(data));
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel carregar a empresa existente.";
+        setErrorMessage(message);
+      } finally {
+        setIsLoadingCompany(false);
+      }
+    }
+
+    loadLatestCompany();
+  }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,23 +170,27 @@ export default function ConfiguracoesPage() {
 
       const supabase = getSupabaseClient();
       const businessInfo = buildBusinessInfo(form);
+      const payload = {
+        name: form.name.trim(),
+        business_info: businessInfo,
+        city: form.city.trim(),
+        state: form.state.trim(),
+        tone: form.tone.trim(),
+        whatsapp: form.whatsapp.trim()
+      };
 
-      const { data, error } = await supabase
-        .from("companies")
-        .insert({
-          name: form.name.trim(),
-          business_info: businessInfo,
-          tone: form.tone.trim(),
-          whatsapp: form.whatsapp.trim()
-        })
-        .select("id")
-        .single();
+      const query = loadedCompanyId
+        ? supabase.from("companies").update(payload).eq("id", loadedCompanyId)
+        : supabase.from("companies").insert(payload);
+
+      const { data, error } = await query.select("id").single();
 
       if (error) {
         throw error;
       }
 
       setSavedCompanyId(data.id);
+      setLoadedCompanyId(data.id);
       setSuccessMessage("Empresa salva com sucesso no Supabase.");
     } catch (error) {
       const message =
@@ -123,6 +212,12 @@ export default function ConfiguracoesPage() {
         onSubmit={handleSubmit}
         className="rounded-lg border border-ink/10 bg-white p-5 shadow-sm md:p-6"
       >
+        {isLoadingCompany && (
+          <div className="mb-5 rounded-lg border border-ink/10 bg-cloud px-4 py-3 text-sm font-semibold text-ink/60">
+            Carregando dados da empresa...
+          </div>
+        )}
+
         <div className="grid gap-5 md:grid-cols-2">
           {fields.map((field) => (
             <label

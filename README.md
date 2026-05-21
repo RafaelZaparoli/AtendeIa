@@ -156,6 +156,8 @@ Campos esperados:
 | `id` | `uuid` | Primary key, default `gen_random_uuid()` |
 | `name` | `text` | Nome da empresa |
 | `business_info` | `text` | Informações organizadas da empresa |
+| `city` | `text` | Cidade da empresa |
+| `state` | `text` | Estado da empresa |
 | `tone` | `text` | Tom de voz da IA |
 | `whatsapp` | `text` | WhatsApp da empresa |
 | `created_at` | `timestamptz` | Default `now()` |

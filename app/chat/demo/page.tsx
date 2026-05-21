@@ -10,6 +10,24 @@ type ChatMessage = {
   text: string;
 };
 
+type AppointmentForm = {
+  customerName: string;
+  customerPhone: string;
+  service: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  notes: string;
+};
+
+const initialAppointmentForm: AppointmentForm = {
+  customerName: "",
+  customerPhone: "",
+  service: "",
+  appointmentDate: "",
+  appointmentTime: "",
+  notes: ""
+};
+
 const initialMessages: ChatMessage[] = [
   {
     id: "welcome",
@@ -61,6 +79,13 @@ export default function ChatDemoPage() {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isAppointmentOpen, setIsAppointmentOpen] = useState(false);
+  const [appointmentForm, setAppointmentForm] = useState<AppointmentForm>(
+    initialAppointmentForm
+  );
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [appointmentMessage, setAppointmentMessage] = useState("");
+  const [appointmentError, setAppointmentError] = useState("");
 
   const whatsapp = useMemo(() => {
     for (const chatMessage of [...messages].reverse()) {
@@ -155,6 +180,78 @@ export default function ChatDemoPage() {
     }
   }
 
+  function updateAppointmentField(field: keyof AppointmentForm, value: string) {
+    setAppointmentForm((currentForm) => ({
+      ...currentForm,
+      [field]: value
+    }));
+  }
+
+  async function handleAppointmentSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const trimmedCompanyId = companyId.trim();
+
+    if (!trimmedCompanyId) {
+      setAppointmentError("Informe o ID da empresa antes de agendar.");
+      return;
+    }
+
+    setIsScheduling(true);
+    setAppointmentMessage("");
+    setAppointmentError("");
+
+    try {
+      const response = await fetch("/api/appointments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          companyId: trimmedCompanyId,
+          customerName: appointmentForm.customerName,
+          customerPhone: appointmentForm.customerPhone,
+          service: appointmentForm.service,
+          appointmentDate: appointmentForm.appointmentDate,
+          appointmentTime: appointmentForm.appointmentTime,
+          notes: appointmentForm.notes
+        })
+      });
+
+      const data = (await response.json()) as {
+        message?: string;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || "Nao foi possivel solicitar o agendamento.");
+      }
+
+      const successMessage =
+        "Agendamento solicitado com sucesso. A empresa entrara em contato para confirmar.";
+
+      setAppointmentMessage(successMessage);
+      setAppointmentForm(initialAppointmentForm);
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: crypto.randomUUID(),
+          author: "AtendeAI",
+          time: getCurrentTime(),
+          text: successMessage
+        }
+      ]);
+    } catch (error) {
+      const friendlyMessage =
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel solicitar o agendamento agora.";
+      setAppointmentError(friendlyMessage);
+    } finally {
+      setIsScheduling(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-cloud text-ink">
       <header className="border-b border-ink/10 bg-white px-5 py-4">
@@ -192,6 +289,17 @@ export default function ChatDemoPage() {
               <p className="text-sm text-ink/55">Atendimento conectado a API</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setAppointmentMessage("");
+                  setAppointmentError("");
+                  setIsAppointmentOpen(true);
+                }}
+                className="rounded-md bg-ink px-3 py-2 text-xs font-bold text-white transition hover:bg-moss"
+              >
+                Agendar horário
+              </button>
               {whatsapp && (
                 <a
                   href={whatsapp.href}
@@ -290,6 +398,128 @@ export default function ChatDemoPage() {
           </form>
         </div>
       </section>
+
+      {isAppointmentOpen && (
+        <div className="fixed inset-0 z-50 flex items-end bg-ink/45 px-4 py-4 sm:items-center sm:justify-center">
+          <div className="max-h-[92vh] w-full overflow-y-auto rounded-lg bg-white shadow-soft sm:max-w-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-ink/10 px-5 py-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-coral">
+                  Solicitar agendamento
+                </p>
+                <h2 className="mt-1 text-xl font-black tracking-tight">
+                  Agendar horário
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAppointmentOpen(false)}
+                className="rounded-md bg-cloud px-3 py-2 text-sm font-bold text-ink/70 transition hover:bg-mint hover:text-moss"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <form onSubmit={handleAppointmentSubmit} className="px-5 py-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label>
+                  <span className="text-sm font-bold text-ink/70">Nome</span>
+                  <input
+                    value={appointmentForm.customerName}
+                    onChange={(event) =>
+                      updateAppointmentField("customerName", event.target.value)
+                    }
+                    className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
+                  />
+                </label>
+                <label>
+                  <span className="text-sm font-bold text-ink/70">Telefone</span>
+                  <input
+                    value={appointmentForm.customerPhone}
+                    onChange={(event) =>
+                      updateAppointmentField("customerPhone", event.target.value)
+                    }
+                    className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
+                  />
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="text-sm font-bold text-ink/70">
+                    Serviço desejado
+                  </span>
+                  <input
+                    value={appointmentForm.service}
+                    onChange={(event) =>
+                      updateAppointmentField("service", event.target.value)
+                    }
+                    className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
+                  />
+                </label>
+                <label>
+                  <span className="text-sm font-bold text-ink/70">Data</span>
+                  <input
+                    type="date"
+                    value={appointmentForm.appointmentDate}
+                    onChange={(event) =>
+                      updateAppointmentField("appointmentDate", event.target.value)
+                    }
+                    className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
+                  />
+                </label>
+                <label>
+                  <span className="text-sm font-bold text-ink/70">Horário</span>
+                  <input
+                    type="time"
+                    value={appointmentForm.appointmentTime}
+                    onChange={(event) =>
+                      updateAppointmentField("appointmentTime", event.target.value)
+                    }
+                    className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
+                  />
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="text-sm font-bold text-ink/70">Observações</span>
+                  <textarea
+                    value={appointmentForm.notes}
+                    onChange={(event) =>
+                      updateAppointmentField("notes", event.target.value)
+                    }
+                    rows={3}
+                    className="mt-2 w-full rounded-md border border-ink/10 bg-cloud px-4 py-3 text-sm outline-none transition focus:border-moss focus:bg-white"
+                  />
+                </label>
+              </div>
+
+              {appointmentMessage && (
+                <div className="mt-4 rounded-lg border border-moss/20 bg-mint px-4 py-3 text-sm font-semibold text-moss">
+                  {appointmentMessage}
+                </div>
+              )}
+
+              {appointmentError && (
+                <div className="mt-4 rounded-lg border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-ink">
+                  {appointmentError}
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-col gap-3 border-t border-ink/10 pt-5 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsAppointmentOpen(false)}
+                  className="min-h-11 rounded-md bg-cloud px-5 text-sm font-semibold text-ink transition hover:bg-mint"
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={isScheduling}
+                  className="min-h-11 rounded-md bg-ink px-5 text-sm font-semibold text-white transition hover:bg-moss disabled:cursor-not-allowed disabled:bg-ink/45"
+                >
+                  {isScheduling ? "Solicitando..." : "Solicitar agendamento"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

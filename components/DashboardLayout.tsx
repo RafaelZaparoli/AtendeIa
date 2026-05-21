@@ -5,7 +5,8 @@ const navItems = [
   { href: "/dashboard", label: "Resumo" },
   { href: "/dashboard/configuracoes", label: "Configuracoes" },
   { href: "/chat/demo", label: "Chat Demo" },
-  { href: "/dashboard/conversas", label: "Conversas" }
+  { href: "/dashboard/conversas", label: "Conversas" },
+  { href: "/dashboard/agendamentos", label: "Agendamentos" }
 ];
 
 export function DashboardLayout({

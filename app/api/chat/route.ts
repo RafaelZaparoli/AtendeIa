@@ -13,7 +13,7 @@ const intentLabels = {
   price: ["Servicos e precos"],
   service: ["Servicos e precos"],
   hours: ["Horario de funcionamento"],
-  address: ["Endereco"],
+  address: ["Endereco", "Cidade", "Estado"],
   payment: ["Formas de pagamento"],
   whatsapp: ["WhatsApp"]
 };
@@ -49,7 +49,7 @@ function detectRequestedInfo(message: string) {
     intentLabels.hours.forEach((label) => requestedLabels.add(label));
   }
 
-  if (/\b(endereco|local|localizacao|onde|rua|bairro)\b/.test(normalizedMessage)) {
+  if (/\b(endereco|local|localizacao|onde|rua|bairro|cidade|estado)\b/.test(normalizedMessage)) {
     intentLabels.address.forEach((label) => requestedLabels.add(label));
   }
 
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
 
     const { data: company, error: companyError } = await supabase
       .from("companies")
-      .select("id, name, business_info, tone, whatsapp, created_at")
+      .select("id, name, business_info, city, state, tone, whatsapp, created_at")
       .eq("id", companyId)
       .maybeSingle();
 
