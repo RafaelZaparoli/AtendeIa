@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type ChatMessage = {
@@ -17,6 +17,11 @@ type AppointmentForm = {
   appointmentDate: string;
   appointmentTime: string;
   notes: string;
+};
+
+type AvailabilityTime = {
+  time: string;
+  available: boolean;
 };
 
 const initialAppointmentForm: AppointmentForm = {
@@ -84,6 +89,9 @@ export default function ChatDemoPage() {
     initialAppointmentForm
   );
   const [isScheduling, setIsScheduling] = useState(false);
+  const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
+  const [availabilityTimes, setAvailabilityTimes] = useState<AvailabilityTime[]>([]);
+  const [availabilityError, setAvailabilityError] = useState("");
   const [appointmentMessage, setAppointmentMessage] = useState("");
   const [appointmentError, setAppointmentError] = useState("");
 
@@ -100,6 +108,69 @@ export default function ChatDemoPage() {
 
     return null;
   }, [messages]);
+
+  const selectedAvailability = availabilityTimes.find(
+    (slot) => slot.time === appointmentForm.appointmentTime
+  );
+  const hasAvailableAppointmentTime = availabilityTimes.some(
+    (slot) => slot.available
+  );
+  const canSubmitAppointment =
+    Boolean(appointmentForm.customerName.trim()) &&
+    Boolean(appointmentForm.customerPhone.trim()) &&
+    Boolean(appointmentForm.service.trim()) &&
+    Boolean(appointmentForm.appointmentDate) &&
+    Boolean(selectedAvailability?.available) &&
+    !isScheduling;
+
+  useEffect(() => {
+    async function loadAvailability() {
+      const trimmedCompanyId = companyId.trim();
+      const date = appointmentForm.appointmentDate;
+
+      setAvailabilityTimes([]);
+      setAvailabilityError("");
+
+      if (!isAppointmentOpen || !date) {
+        return;
+      }
+
+      if (!trimmedCompanyId) {
+        setAvailabilityError("Informe o ID da empresa para ver os horarios.");
+        return;
+      }
+
+      setIsLoadingAvailability(true);
+
+      try {
+        const response = await fetch(
+          `/api/appointments/availability?companyId=${encodeURIComponent(
+            trimmedCompanyId
+          )}&date=${encodeURIComponent(date)}`
+        );
+        const data = (await response.json()) as {
+          times?: AvailabilityTime[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error || "Nao foi possivel carregar os horarios.");
+        }
+
+        setAvailabilityTimes(data.times || []);
+      } catch (error) {
+        const friendlyMessage =
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel carregar a disponibilidade.";
+        setAvailabilityError(friendlyMessage);
+      } finally {
+        setIsLoadingAvailability(false);
+      }
+    }
+
+    loadAvailability();
+  }, [appointmentForm.appointmentDate, companyId, isAppointmentOpen]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -197,6 +268,11 @@ export default function ChatDemoPage() {
       return;
     }
 
+    if (!selectedAvailability?.available) {
+      setAppointmentError("Escolha um horario disponivel antes de solicitar.");
+      return;
+    }
+
     setIsScheduling(true);
     setAppointmentMessage("");
     setAppointmentError("");
@@ -232,6 +308,7 @@ export default function ChatDemoPage() {
 
       setAppointmentMessage(successMessage);
       setAppointmentForm(initialAppointmentForm);
+      setAvailabilityTimes([]);
       setMessages((currentMessages) => [
         ...currentMessages,
         {
@@ -454,28 +531,79 @@ export default function ChatDemoPage() {
                     className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
                   />
                 </label>
-                <label>
+                <label className="sm:col-span-2">
                   <span className="text-sm font-bold text-ink/70">Data</span>
                   <input
                     type="date"
                     value={appointmentForm.appointmentDate}
-                    onChange={(event) =>
-                      updateAppointmentField("appointmentDate", event.target.value)
-                    }
+                    onChange={(event) => {
+                      updateAppointmentField("appointmentDate", event.target.value);
+                      updateAppointmentField("appointmentTime", "");
+                    }}
                     className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
                   />
                 </label>
-                <label>
-                  <span className="text-sm font-bold text-ink/70">Horário</span>
-                  <input
-                    type="time"
-                    value={appointmentForm.appointmentTime}
-                    onChange={(event) =>
-                      updateAppointmentField("appointmentTime", event.target.value)
-                    }
-                    className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
-                  />
-                </label>
+                <div className="sm:col-span-2">
+                  <p className="text-sm font-bold text-ink/70">Horários</p>
+                  {!appointmentForm.appointmentDate && (
+                    <p className="mt-2 rounded-md bg-cloud px-4 py-3 text-sm text-ink/55">
+                      Escolha uma data para ver os horários disponíveis.
+                    </p>
+                  )}
+                  {isLoadingAvailability && (
+                    <p className="mt-2 rounded-md bg-cloud px-4 py-3 text-sm font-semibold text-ink/60">
+                      Carregando horários...
+                    </p>
+                  )}
+                  {availabilityError && !isLoadingAvailability && (
+                    <p className="mt-2 rounded-md border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-ink">
+                      {availabilityError}
+                    </p>
+                  )}
+                  {availabilityTimes.length > 0 &&
+                    !hasAvailableAppointmentTime &&
+                    !isLoadingAvailability &&
+                    !availabilityError && (
+                      <p className="mt-2 rounded-md border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-ink">
+                        Não há horários disponíveis para esta data. Escolha outro dia.
+                      </p>
+                    )}
+                  {availabilityTimes.length > 0 && !isLoadingAvailability && (
+                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {availabilityTimes.map((slot) => {
+                        const isSelected =
+                          appointmentForm.appointmentTime === slot.time;
+
+                        return (
+                          <button
+                            key={slot.time}
+                            type="button"
+                            disabled={!slot.available}
+                            onClick={() =>
+                              updateAppointmentField("appointmentTime", slot.time)
+                            }
+                            className={`min-h-14 rounded-md border px-3 py-2 text-left text-sm font-bold transition ${
+                              slot.available
+                                ? isSelected
+                                  ? "border-moss bg-moss text-white shadow-sm"
+                                  : "border-ink/10 bg-cloud text-ink hover:border-moss hover:bg-mint"
+                                : "cursor-not-allowed border-ink/5 bg-ink/5 text-ink/35"
+                            }`}
+                          >
+                            <span className="block">{slot.time}</span>
+                            <span className="block text-xs font-semibold">
+                              {isSelected
+                                ? "Selecionado"
+                                : slot.available
+                                  ? "Disponível"
+                                  : "Indisponível"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 <label className="sm:col-span-2">
                   <span className="text-sm font-bold text-ink/70">Observações</span>
                   <textarea
@@ -510,7 +638,7 @@ export default function ChatDemoPage() {
                   Cancelar
                 </button>
                 <button
-                  disabled={isScheduling}
+                  disabled={!canSubmitAppointment}
                   className="min-h-11 rounded-md bg-ink px-5 text-sm font-semibold text-white transition hover:bg-moss disabled:cursor-not-allowed disabled:bg-ink/45"
                 >
                   {isScheduling ? "Solicitando..." : "Solicitar agendamento"}

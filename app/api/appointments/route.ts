@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAppointmentTime } from "@/lib/appointmentSlots";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 type AppointmentRequest = {
@@ -62,8 +63,32 @@ export async function POST(request: Request) {
   const appointmentTime = getStringValue(body.appointmentTime);
   const notes = getStringValue(body.notes) || null;
 
+  if (!isAppointmentTime(appointmentTime)) {
+    return buildErrorResponse("Selecione um horario disponivel.", 400);
+  }
+
   try {
     const supabase = getSupabaseClient();
+    const { data: occupiedAppointments, error: availabilityError } = await supabase
+      .from("appointments")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("appointment_date", appointmentDate)
+      .eq("appointment_time", appointmentTime)
+      .neq("status", "cancelado")
+      .limit(1);
+
+    if (availabilityError) {
+      console.error("Failed to validate appointment availability:", availabilityError.message);
+      return buildErrorResponse("Nao foi possivel validar a disponibilidade.");
+    }
+
+    if (occupiedAppointments.length > 0) {
+      return buildErrorResponse(
+        "Este horario nao esta mais disponivel. Escolha outro horario.",
+        409
+      );
+    }
 
     const { data, error } = await supabase
       .from("appointments")
