@@ -22,6 +22,9 @@ export default function Home() {
       <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-6">
         <div className="text-xl font-black tracking-tight">AtendeAI</div>
         <nav className="flex items-center gap-2">
+          <ButtonLink href="/precos" variant="ghost">
+            Preços
+          </ButtonLink>
           <ButtonLink href="/chat/demo" variant="ghost">
             Demo
           </ButtonLink>
@@ -46,6 +49,9 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <ButtonLink href="/chat/demo">Testar demo</ButtonLink>
+            <ButtonLink href="/precos" variant="secondary">
+              Ver preços
+            </ButtonLink>
             <ButtonLink href="/dashboard" variant="secondary">
               Entrar no painel
             </ButtonLink>
