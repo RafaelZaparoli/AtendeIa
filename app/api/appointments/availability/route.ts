@@ -2,8 +2,47 @@ import { NextResponse } from "next/server";
 import { getCompanyAppointmentTimes } from "@/lib/companySchedule";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
-function buildErrorResponse(message: string, status = 500) {
-  return NextResponse.json({ error: message }, { status });
+type AvailabilityTime = {
+  time: string;
+  available: boolean;
+};
+
+type CompanySchedule = {
+  opening_time: string | null;
+  closing_time: string | null;
+  slot_interval_minutes: number | null;
+  working_days: string[] | null;
+};
+
+const defaultCompanySchedule: CompanySchedule = {
+  opening_time: null,
+  closing_time: null,
+  slot_interval_minutes: null,
+  working_days: null
+};
+
+function buildAvailabilityResponse(
+  date: string,
+  times: AvailabilityTime[],
+  status = 200,
+  error?: string
+) {
+  return NextResponse.json(
+    {
+      date,
+      times,
+      ...(error ? { error } : {})
+    },
+    { status }
+  );
+}
+
+function isDateValue(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isUUID(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
 export async function GET(request: Request) {
@@ -12,37 +51,84 @@ export async function GET(request: Request) {
   const date = searchParams.get("date")?.trim() || "";
 
   if (!companyId) {
-    return buildErrorResponse("O parametro companyId e obrigatorio.", 400);
+    return buildAvailabilityResponse(
+      date,
+      [],
+      400,
+      "O parametro companyId e obrigatorio."
+    );
   }
 
   if (!date) {
-    return buildErrorResponse("O parametro date e obrigatorio.", 400);
+    return buildAvailabilityResponse(
+      date,
+      [],
+      400,
+      "O parametro date e obrigatorio."
+    );
+  }
+
+  if (!isUUID(companyId)) {
+    return buildAvailabilityResponse(
+      date,
+      [],
+      400,
+      "Formato de ID de empresa invalido."
+    );
+  }
+
+  if (!isDateValue(date)) {
+    return buildAvailabilityResponse(
+      date,
+      [],
+      400,
+      "Envie a data no formato YYYY-MM-DD."
+    );
   }
 
   try {
     const supabase = getSupabaseClient();
-    const { data: company, error: companyError } = await supabase
+    const { data: configuredCompany, error: companyError } = await supabase
       .from("companies")
       .select("opening_time, closing_time, slot_interval_minutes, working_days")
       .eq("id", companyId)
       .maybeSingle();
 
+    let company = configuredCompany;
+
     if (companyError) {
       console.error("Failed to load company schedule:", companyError.message);
-      return buildErrorResponse("Nao foi possivel carregar a agenda da empresa.");
+
+      const { data: fallbackCompany, error: fallbackCompanyError } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("id", companyId)
+        .maybeSingle();
+
+      if (fallbackCompanyError) {
+        console.error(
+          "Failed to load fallback company schedule:",
+          fallbackCompanyError.message
+        );
+        return buildAvailabilityResponse(
+          date,
+          [],
+          500,
+          "Nao foi possivel carregar a agenda da empresa."
+        );
+      }
+
+      company = fallbackCompany ? defaultCompanySchedule : null;
     }
 
     if (!company) {
-      return buildErrorResponse("Empresa nao encontrada.", 404);
+      return buildAvailabilityResponse(date, [], 404, "Empresa nao encontrada.");
     }
 
     const appointmentTimes = getCompanyAppointmentTimes(company, date);
 
     if (appointmentTimes.length === 0) {
-      return NextResponse.json({
-        date,
-        times: []
-      });
+      return buildAvailabilityResponse(date, []);
     }
 
     const { data, error } = await supabase
@@ -54,7 +140,12 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error("Failed to load appointment availability:", error.message);
-      return buildErrorResponse("Nao foi possivel carregar os horarios.");
+      return buildAvailabilityResponse(
+        date,
+        [],
+        500,
+        "Nao foi possivel carregar os horarios."
+      );
     }
 
     const unavailableTimes = new Set(
@@ -65,15 +156,20 @@ export async function GET(request: Request) {
       })
     );
 
-    return NextResponse.json({
+    return buildAvailabilityResponse(
       date,
-      times: appointmentTimes.map((time) => ({
+      appointmentTimes.map((time) => ({
         time,
         available: !unavailableTimes.has(time)
       }))
-    });
+    );
   } catch (error) {
     console.error("Unexpected availability error:", error);
-    return buildErrorResponse("Erro inesperado ao buscar disponibilidade.");
+    return buildAvailabilityResponse(
+      date,
+      [],
+      500,
+      "Erro inesperado ao buscar disponibilidade."
+    );
   }
 }

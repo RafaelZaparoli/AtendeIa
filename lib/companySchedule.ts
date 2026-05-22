@@ -66,9 +66,20 @@ function readWeekday(date: string) {
 
 export function getCompanyAppointmentTimes(company: ScheduleCompany, date: string) {
   const weekday = readWeekday(date);
-  const workingDays = company.working_days?.length
+  const rawWorkingDays = company.working_days?.length
     ? company.working_days
     : defaultWorkingDays;
+
+  const workingDays = rawWorkingDays.map((day) => {
+    if (day === "0") return "sunday";
+    if (day === "1") return "monday";
+    if (day === "2") return "tuesday";
+    if (day === "3") return "wednesday";
+    if (day === "4") return "thursday";
+    if (day === "5") return "friday";
+    if (day === "6") return "saturday";
+    return day;
+  });
 
   if (!weekday || !workingDays.includes(weekday)) {
     return [];

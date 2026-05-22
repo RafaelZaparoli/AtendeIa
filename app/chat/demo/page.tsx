@@ -111,6 +111,7 @@ export function ChatExperience({
   const [isScheduling, setIsScheduling] = useState(false);
   const [loadingTimes, setLoadingTimes] = useState(false);
   const [timeSlots, setTimeSlots] = useState<AvailabilityTime[]>([]);
+  const [timeSlotsDate, setTimeSlotsDate] = useState("");
   const [availabilityError, setAvailabilityError] = useState("");
   const [appointmentMessage, setAppointmentMessage] = useState("");
   const [appointmentError, setAppointmentError] = useState("");
@@ -148,14 +149,15 @@ export function ChatExperience({
       const trimmedCompanyId = companyId.trim();
       const date = selectedDate;
 
-      setTimeSlots([]);
       setAvailabilityError("");
 
       if (!isAppointmentOpen || !date) {
+        setLoadingTimes(false);
         return;
       }
 
       if (!trimmedCompanyId) {
+        setLoadingTimes(false);
         setAvailabilityError("Informe o ID da empresa para ver os horarios.");
         return;
       }
@@ -169,21 +171,26 @@ export function ChatExperience({
           )}&date=${encodeURIComponent(date)}`
         );
         const data = (await response.json()) as {
+          date?: string;
           times?: AvailabilityTime[];
           error?: string;
         };
 
         if (!response.ok) {
-          throw new Error(data.error || "Nao foi possivel carregar os horarios.");
+          throw new Error(data.error || "Availability request failed.");
         }
 
-        setTimeSlots(data.times || []);
+        if (!Array.isArray(data.times)) {
+          throw new Error("Availability response is missing times.");
+        }
+
+        setTimeSlots(data.times);
+        setTimeSlotsDate(data.date || date);
       } catch (error) {
-        const friendlyMessage =
-          error instanceof Error
-            ? error.message
-            : "Nao foi possivel carregar a disponibilidade.";
-        setAvailabilityError(friendlyMessage);
+        console.error("Failed to load appointment availability:", error);
+        setAvailabilityError(
+          "Não foi possível carregar os horários. Tente novamente."
+        );
       } finally {
         setLoadingTimes(false);
       }
@@ -351,6 +358,7 @@ export function ChatExperience({
       setSelectedDate("");
       setSelectedTime("");
       setTimeSlots([]);
+      setTimeSlotsDate("");
       setMessages((currentMessages) => [
         ...currentMessages,
         {
@@ -588,6 +596,7 @@ export function ChatExperience({
                     onChange={(event) => {
                       setSelectedDate(event.target.value);
                       setSelectedTime("");
+                      setAvailabilityError("");
                     }}
                     className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
                   />
@@ -609,7 +618,16 @@ export function ChatExperience({
                       {availabilityError}
                     </p>
                   )}
-                  {timeSlots.length > 0 &&
+                  {timeSlotsDate === selectedDate &&
+                    timeSlots.length === 0 &&
+                    !loadingTimes &&
+                    !availabilityError && (
+                      <p className="mt-2 rounded-md border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-ink">
+                        Não há horários disponíveis para esta data. Escolha outro dia.
+                      </p>
+                    )}
+                  {timeSlotsDate === selectedDate &&
+                    timeSlots.length > 0 &&
                     !hasAvailableAppointmentTime &&
                     !loadingTimes &&
                     !availabilityError && (
@@ -617,7 +635,9 @@ export function ChatExperience({
                         Não há horários disponíveis para esta data. Escolha outro dia.
                       </p>
                     )}
-                  {timeSlots.length > 0 && !loadingTimes && (
+                  {timeSlotsDate === selectedDate &&
+                    timeSlots.length > 0 &&
+                    !loadingTimes && (
                     <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {timeSlots.map((slot) => {
                         const isSelected = selectedTime === slot.time;
