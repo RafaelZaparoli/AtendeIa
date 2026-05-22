@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { DashboardAuthGate } from "@/components/DashboardAuthGate";
 import { LogoutButton } from "@/components/LogoutButton";
 
 const navItems = [
@@ -22,8 +21,7 @@ export function DashboardLayout({
   children: ReactNode;
 }) {
   return (
-    <DashboardAuthGate>
-      <div className="min-h-screen bg-cloud text-ink">
+    <div className="min-h-screen bg-cloud text-ink">
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-ink/10 bg-white px-5 py-6 lg:block">
         <Link href="/" className="mb-8 block text-xl font-black tracking-tight">
           AtendeAI
@@ -70,7 +68,6 @@ export function DashboardLayout({
         </header>
         <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
       </div>
-      </div>
-    </DashboardAuthGate>
+    </div>
   );
 }

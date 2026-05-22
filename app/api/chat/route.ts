@@ -6,6 +6,8 @@ type ChatRequest = {
   message?: unknown;
 };
 
+type ChatCompany = Pick<Company, "id" | "business_info" | "whatsapp">;
+
 const fallbackAnswer =
   "Não tenho essa informação no momento. Recomendo falar com um atendente humano.";
 
@@ -64,7 +66,7 @@ function detectRequestedInfo(message: string) {
   return [...requestedLabels];
 }
 
-function getBusinessInfoLines(company: Company) {
+function getBusinessInfoLines(company: ChatCompany) {
   const lines = company.business_info
     .split("\n")
     .map((line) => line.trim())
@@ -77,7 +79,7 @@ function getBusinessInfoLines(company: Company) {
   return lines;
 }
 
-function findRelevantLines(company: Company, labels: string[]) {
+function findRelevantLines(company: ChatCompany, labels: string[]) {
   const businessInfoLines = getBusinessInfoLines(company);
 
   return labels
@@ -91,7 +93,7 @@ function findRelevantLines(company: Company, labels: string[]) {
     .filter((line): line is string => Boolean(line));
 }
 
-function generateSimulatedAnswer(company: Company, message: string) {
+function generateSimulatedAnswer(company: ChatCompany, message: string) {
   const requestedLabels = detectRequestedInfo(message);
 
   if (requestedLabels.length === 0) {
@@ -140,9 +142,7 @@ export async function POST(request: Request) {
 
     const { data: company, error: companyError } = await supabase
       .from("companies")
-      .select(
-        "id, user_id, name, slug, business_info, city, state, opening_time, closing_time, slot_interval_minutes, working_days, tone, whatsapp, created_at"
-      )
+      .select("id, business_info, whatsapp")
       .eq("id", companyId)
       .maybeSingle();
 

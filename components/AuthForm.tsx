@@ -5,6 +5,10 @@ import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
+function getDashboardRedirect(nextPath: string | null) {
+  return nextPath?.startsWith("/dashboard") ? nextPath : "/dashboard";
+}
+
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,7 +41,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           throw error;
         }
 
-        router.replace(searchParams.get("next") || "/dashboard");
+        router.replace(getDashboardRedirect(searchParams.get("next")));
         return;
       }
 
