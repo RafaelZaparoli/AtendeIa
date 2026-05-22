@@ -15,7 +15,9 @@ export default async function PublicChatPage({ params }: PublicChatPageProps) {
     const supabase = getSupabaseClient();
     const { data: company, error } = await supabase
       .from("companies")
-      .select("id, name, slug, business_info, city, state, tone, whatsapp, created_at")
+      .select(
+        "id, name, slug, business_info, city, state, opening_time, closing_time, slot_interval_minutes, working_days, tone, whatsapp, created_at"
+      )
       .eq("slug", slug)
       .maybeSingle();
 

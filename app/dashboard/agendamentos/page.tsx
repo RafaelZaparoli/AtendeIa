@@ -6,6 +6,10 @@ import { getSupabaseClient, type Appointment } from "@/lib/supabaseClient";
 
 type AppointmentStatus = Appointment["status"];
 type StatusFilter = "todos" | AppointmentStatus;
+type AppointmentUpdate = {
+  id: string;
+  status: Extract<AppointmentStatus, "confirmado" | "cancelado">;
+};
 
 type AppointmentWithCompany = Appointment & {
   companies?: {
@@ -48,14 +52,40 @@ function getCompanyLabel(appointment: AppointmentWithCompany) {
   return appointment.companies?.name || appointment.company_id;
 }
 
+function formatWhatsappPhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+
+  if (!digits) {
+    return "";
+  }
+
+  return digits.startsWith("55") ? digits : `55${digits}`;
+}
+
+function buildWhatsappLink(appointment: AppointmentWithCompany) {
+  const phone = formatWhatsappPhone(appointment.customer_phone);
+
+  if (!phone) {
+    return "";
+  }
+
+  const message = `Olá, ${appointment.customer_name}. Recebemos sua solicitação de agendamento para ${appointment.service} no dia ${formatDate(
+    appointment.appointment_date
+  )} às ${appointment.appointment_time.slice(
+    0,
+    5
+  )}. Podemos confirmar esse horário?`;
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
 export default function AgendamentosPage() {
   const [appointments, setAppointments] = useState<AppointmentWithCompany[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
   const [isLoading, setIsLoading] = useState(true);
-  const [updatingAppointmentId, setUpdatingAppointmentId] = useState<string | null>(
-    null
-  );
+  const [updatingAppointment, setUpdatingAppointment] =
+    useState<AppointmentUpdate | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -66,12 +96,34 @@ export default function AgendamentosPage() {
 
       try {
         const supabase = getSupabaseClient();
+        const { data: userData } = await supabase.auth.getUser();
+
+        if (!userData.user) {
+          throw new Error("Sessao expirada. Entre novamente.");
+        }
+
+        const { data: userCompanies, error: companiesError } = await supabase
+          .from("companies")
+          .select("id")
+          .eq("user_id", userData.user.id);
+
+        if (companiesError) {
+          throw companiesError;
+        }
+
+        const companyIds = (userCompanies || []).map((company) => company.id);
+
+        if (companyIds.length === 0) {
+          setAppointments([]);
+          return;
+        }
 
         const responseWithCompany = await supabase
           .from("appointments")
           .select(
             "id, company_id, customer_name, customer_phone, service, appointment_date, appointment_time, notes, status, created_at, companies(name)"
           )
+          .in("company_id", companyIds)
           .order("created_at", { ascending: false });
 
         if (!responseWithCompany.error) {
@@ -89,6 +141,7 @@ export default function AgendamentosPage() {
           .select(
             "id, company_id, customer_name, customer_phone, service, appointment_date, appointment_time, notes, status, created_at"
           )
+          .in("company_id", companyIds)
           .order("created_at", { ascending: false });
 
         if (responseWithoutCompany.error) {
@@ -140,28 +193,43 @@ export default function AgendamentosPage() {
   }, [appointments, search, statusFilter]);
 
   async function updateAppointmentStatus(
-    appointmentId: string,
-    status: AppointmentStatus
+    appointment: AppointmentWithCompany,
+    status: AppointmentUpdate["status"]
   ) {
-    setUpdatingAppointmentId(appointmentId);
+    if (appointment.status !== "pendente") {
+      return;
+    }
+
+    setUpdatingAppointment({
+      id: appointment.id,
+      status
+    });
     setErrorMessage("");
     setSuccessMessage("");
 
     try {
       const supabase = getSupabaseClient();
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("appointments")
         .update({ status })
-        .eq("id", appointmentId);
+        .eq("id", appointment.id)
+        .eq("company_id", appointment.company_id)
+        .eq("status", "pendente")
+        .select("id, status")
+        .maybeSingle();
 
       if (error) {
         throw error;
       }
 
+      if (!data) {
+        throw new Error("Este agendamento ja foi atualizado. Recarregue a lista.");
+      }
+
       setAppointments((currentAppointments) =>
         currentAppointments.map((appointment) =>
-          appointment.id === appointmentId
-            ? { ...appointment, status }
+          appointment.id === data.id
+            ? { ...appointment, status: data.status }
             : appointment
         )
       );
@@ -177,7 +245,7 @@ export default function AgendamentosPage() {
           : "Nao foi possivel atualizar o agendamento.";
       setErrorMessage(message);
     } finally {
-      setUpdatingAppointmentId(null);
+      setUpdatingAppointment(null);
     }
   }
 
@@ -260,11 +328,14 @@ export default function AgendamentosPage() {
 
         {!isLoading && !errorMessage && filteredAppointments.length > 0 && (
           <div className="mt-6 grid gap-4">
-            {filteredAppointments.map((appointment) => (
-              <article
-                key={appointment.id}
-                className="rounded-lg border border-ink/10 bg-cloud p-5"
-              >
+            {filteredAppointments.map((appointment) => {
+              const whatsappLink = buildWhatsappLink(appointment);
+
+              return (
+                <article
+                  key={appointment.id}
+                  className="rounded-lg border border-ink/10 bg-cloud p-5"
+                >
                 <div className="flex flex-col gap-3 border-b border-ink/10 pb-4 md:flex-row md:items-start md:justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-coral">
@@ -285,38 +356,46 @@ export default function AgendamentosPage() {
                     >
                       {appointment.status}
                     </span>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={
-                          updatingAppointmentId === appointment.id ||
-                          appointment.status === "confirmado"
-                        }
-                        onClick={() =>
-                          updateAppointmentStatus(appointment.id, "confirmado")
-                        }
-                        className="min-h-9 rounded-md bg-moss px-3 text-xs font-bold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-ink/25"
+                    {whatsappLink && (
+                      <a
+                        href={whatsappLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex min-h-9 items-center justify-center rounded-md bg-ink px-3 text-xs font-bold text-white transition hover:bg-moss"
                       >
-                        {updatingAppointmentId === appointment.id
-                          ? "Atualizando..."
-                          : "Confirmar"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={
-                          updatingAppointmentId === appointment.id ||
-                          appointment.status === "cancelado"
-                        }
-                        onClick={() =>
-                          updateAppointmentStatus(appointment.id, "cancelado")
-                        }
-                        className="min-h-9 rounded-md bg-white px-3 text-xs font-bold text-ink ring-1 ring-ink/10 transition hover:bg-coral/10 hover:text-coral disabled:cursor-not-allowed disabled:bg-ink/5 disabled:text-ink/35"
-                      >
-                        {updatingAppointmentId === appointment.id
-                          ? "Atualizando..."
-                          : "Cancelar"}
-                      </button>
-                    </div>
+                        Chamar no WhatsApp
+                      </a>
+                    )}
+                    {appointment.status === "pendente" && (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={updatingAppointment?.id === appointment.id}
+                          onClick={() =>
+                            updateAppointmentStatus(appointment, "confirmado")
+                          }
+                          className="min-h-9 rounded-md bg-moss px-3 text-xs font-bold text-white transition hover:bg-ink disabled:cursor-not-allowed disabled:bg-ink/25"
+                        >
+                          {updatingAppointment?.id === appointment.id &&
+                          updatingAppointment.status === "confirmado"
+                            ? "Atualizando..."
+                            : "Confirmar"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={updatingAppointment?.id === appointment.id}
+                          onClick={() =>
+                            updateAppointmentStatus(appointment, "cancelado")
+                          }
+                          className="min-h-9 rounded-md bg-white px-3 text-xs font-bold text-ink ring-1 ring-ink/10 transition hover:bg-coral/10 hover:text-coral disabled:cursor-not-allowed disabled:bg-ink/5 disabled:text-ink/35"
+                        >
+                          {updatingAppointment?.id === appointment.id &&
+                          updatingAppointment.status === "cancelado"
+                            ? "Atualizando..."
+                            : "Cancelar"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -358,8 +437,9 @@ export default function AgendamentosPage() {
                     </span>
                   </p>
                 </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>

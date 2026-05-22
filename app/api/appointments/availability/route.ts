@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { appointmentTimes } from "@/lib/appointmentSlots";
+import { getCompanyAppointmentTimes } from "@/lib/companySchedule";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 function buildErrorResponse(message: string, status = 500) {
@@ -21,6 +21,30 @@ export async function GET(request: Request) {
 
   try {
     const supabase = getSupabaseClient();
+    const { data: company, error: companyError } = await supabase
+      .from("companies")
+      .select("opening_time, closing_time, slot_interval_minutes, working_days")
+      .eq("id", companyId)
+      .maybeSingle();
+
+    if (companyError) {
+      console.error("Failed to load company schedule:", companyError.message);
+      return buildErrorResponse("Nao foi possivel carregar a agenda da empresa.");
+    }
+
+    if (!company) {
+      return buildErrorResponse("Empresa nao encontrada.", 404);
+    }
+
+    const appointmentTimes = getCompanyAppointmentTimes(company, date);
+
+    if (appointmentTimes.length === 0) {
+      return NextResponse.json({
+        date,
+        times: []
+      });
+    }
+
     const { data, error } = await supabase
       .from("appointments")
       .select("appointment_time")
@@ -35,9 +59,8 @@ export async function GET(request: Request) {
 
     const unavailableTimes = new Set(
       (data || []).map((appointment) => {
-        // O Supabase retorna time como "HH:MM:SS" ou similar, precisamos pegar so "HH:MM"
-        return typeof appointment.appointment_time === "string" 
-          ? appointment.appointment_time.slice(0, 5) 
+        return typeof appointment.appointment_time === "string"
+          ? appointment.appointment_time.slice(0, 5)
           : appointment.appointment_time;
       })
     );

@@ -1,8 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { DashboardAuthGate } from "@/components/DashboardAuthGate";
+import { LogoutButton } from "@/components/LogoutButton";
 
 const navItems = [
   { href: "/dashboard", label: "Resumo" },
+  { href: "/dashboard/empresas", label: "Empresas" },
   { href: "/dashboard/configuracoes", label: "Configuracoes" },
   { href: "/chat/demo", label: "Chat Demo" },
   { href: "/dashboard/conversas", label: "Conversas" },
@@ -19,7 +22,8 @@ export function DashboardLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-cloud text-ink">
+    <DashboardAuthGate>
+      <div className="min-h-screen bg-cloud text-ink">
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-ink/10 bg-white px-5 py-6 lg:block">
         <Link href="/" className="mb-8 block text-xl font-black tracking-tight">
           AtendeAI
@@ -50,21 +54,23 @@ export function DashboardLayout({
                 {description}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2 lg:hidden">
+            <div className="flex flex-wrap items-center gap-2">
               {navItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="rounded-md bg-cloud px-3 py-2 text-xs font-semibold"
+                  className="rounded-md bg-cloud px-3 py-2 text-xs font-semibold lg:hidden"
                 >
                   {item.label}
                 </Link>
               ))}
+              <LogoutButton />
             </div>
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
       </div>
-    </div>
+      </div>
+    </DashboardAuthGate>
   );
 }

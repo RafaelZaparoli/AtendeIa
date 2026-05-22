@@ -2,11 +2,16 @@ import { createClient } from "@supabase/supabase-js";
 
 export type Company = {
   id: string;
+  user_id: string | null;
   name: string;
   slug: string;
   business_info: string;
   city: string | null;
   state: string | null;
+  opening_time: string | null;
+  closing_time: string | null;
+  slot_interval_minutes: number | null;
+  working_days: string[] | null;
   tone: string | null;
   whatsapp: string | null;
   created_at: string;

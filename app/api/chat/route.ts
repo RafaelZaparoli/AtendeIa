@@ -140,7 +140,9 @@ export async function POST(request: Request) {
 
     const { data: company, error: companyError } = await supabase
       .from("companies")
-      .select("id, name, slug, business_info, city, state, tone, whatsapp, created_at")
+      .select(
+        "id, user_id, name, slug, business_info, city, state, opening_time, closing_time, slot_interval_minutes, working_days, tone, whatsapp, created_at"
+      )
       .eq("id", companyId)
       .maybeSingle();
 

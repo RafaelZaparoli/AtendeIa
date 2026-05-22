@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { workingDayOptions } from "@/lib/companySchedule";
 import { getSupabaseClient, type Company } from "@/lib/supabaseClient";
 
 type CompanyForm = {
@@ -12,6 +13,10 @@ type CompanyForm = {
   address: string;
   city: string;
   state: string;
+  openingTime: string;
+  closingTime: string;
+  slotIntervalMinutes: string;
+  workingDays: string[];
   paymentMethods: string;
   faqs: string;
   importantRules: string;
@@ -27,6 +32,10 @@ const initialForm: CompanyForm = {
   address: "Rua das Flores, 120 - Centro",
   city: "Sao Paulo",
   state: "SP",
+  openingTime: "09:00",
+  closingTime: "19:00",
+  slotIntervalMinutes: "30",
+  workingDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
   paymentMethods: "Pix, dinheiro, cartao de debito e credito",
   faqs: "Precisa agendar? Sim. Atende criancas? Sim, a partir de 8 anos.",
   importantRules:
@@ -39,6 +48,7 @@ const fields: Array<{
   id: keyof CompanyForm;
   label: string;
   textarea?: boolean;
+  type?: string;
 }> = [
   { id: "name", label: "Nome da empresa" },
   { id: "slug", label: "Slug do link publico" },
@@ -47,6 +57,13 @@ const fields: Array<{
   { id: "address", label: "Endereco" },
   { id: "city", label: "Cidade" },
   { id: "state", label: "Estado" },
+  { id: "openingTime", label: "Abertura para agendamentos", type: "time" },
+  { id: "closingTime", label: "Fechamento para agendamentos", type: "time" },
+  {
+    id: "slotIntervalMinutes",
+    label: "Intervalo entre horarios (minutos)",
+    type: "number"
+  },
   { id: "paymentMethods", label: "Formas de pagamento" },
   { id: "faqs", label: "Perguntas frequentes", textarea: true },
   { id: "importantRules", label: "Regras importantes", textarea: true },
@@ -106,6 +123,14 @@ function buildFormFromCompany(company: Company): CompanyForm {
       company.state ||
       readBusinessInfoValue(company.business_info, "Estado") ||
       initialForm.state,
+    openingTime: company.opening_time?.slice(0, 5) || initialForm.openingTime,
+    closingTime: company.closing_time?.slice(0, 5) || initialForm.closingTime,
+    slotIntervalMinutes: String(
+      company.slot_interval_minutes || initialForm.slotIntervalMinutes
+    ),
+    workingDays: company.working_days?.length
+      ? company.working_days
+      : initialForm.workingDays,
     paymentMethods:
       readBusinessInfoValue(company.business_info, "Formas de pagamento") ||
       initialForm.paymentMethods,
@@ -152,6 +177,15 @@ export default function ConfiguracoesPage() {
     updateField("slug", createSlug(value));
   }
 
+  function toggleWorkingDay(day: string) {
+    setForm((currentForm) => ({
+      ...currentForm,
+      workingDays: currentForm.workingDays.includes(day)
+        ? currentForm.workingDays.filter((workingDay) => workingDay !== day)
+        : [...currentForm.workingDays, day]
+    }));
+  }
+
   async function copyPublicLink() {
     try {
       await navigator.clipboard.writeText(publicLink);
@@ -174,9 +208,18 @@ export default function ConfiguracoesPage() {
     async function loadLatestCompany() {
       try {
         const supabase = getSupabaseClient();
+        const { data: userData } = await supabase.auth.getUser();
+
+        if (!userData.user) {
+          throw new Error("Sessao expirada. Entre novamente.");
+        }
+
         const { data, error } = await supabase
           .from("companies")
-          .select("id, name, slug, business_info, city, state, tone, whatsapp, created_at")
+          .select(
+            "id, user_id, name, slug, business_info, city, state, opening_time, closing_time, slot_interval_minutes, working_days, tone, whatsapp, created_at"
+          )
+          .eq("user_id", userData.user.id)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -221,7 +264,27 @@ export default function ConfiguracoesPage() {
         throw new Error("Informe o slug do link publico antes de salvar.");
       }
 
+      const interval = Number(form.slotIntervalMinutes);
+
+      if (!form.workingDays.length) {
+        throw new Error("Selecione ao menos um dia de atendimento.");
+      }
+
+      if (!form.openingTime || !form.closingTime || form.closingTime <= form.openingTime) {
+        throw new Error("Informe um horario de abertura e fechamento validos.");
+      }
+
+      if (!Number.isInteger(interval) || interval < 5) {
+        throw new Error("Informe um intervalo valido entre horarios.");
+      }
+
       const supabase = getSupabaseClient();
+      const { data: userData } = await supabase.auth.getUser();
+
+      if (!userData.user) {
+        throw new Error("Sessao expirada. Entre novamente.");
+      }
+
       const businessInfo = buildBusinessInfo(form);
       const payload = {
         name: form.name.trim(),
@@ -229,13 +292,24 @@ export default function ConfiguracoesPage() {
         business_info: businessInfo,
         city: form.city.trim(),
         state: form.state.trim(),
+        opening_time: form.openingTime,
+        closing_time: form.closingTime,
+        slot_interval_minutes: interval,
+        working_days: form.workingDays,
         tone: form.tone.trim(),
         whatsapp: form.whatsapp.trim()
       };
 
       const query = loadedCompanyId
-        ? supabase.from("companies").update(payload).eq("id", loadedCompanyId)
-        : supabase.from("companies").insert(payload);
+        ? supabase
+            .from("companies")
+            .update(payload)
+            .eq("id", loadedCompanyId)
+            .eq("user_id", userData.user.id)
+        : supabase.from("companies").insert({
+            ...payload,
+            user_id: userData.user.id
+          });
 
       const { data, error } = await query.select("id").single();
 
@@ -291,6 +365,9 @@ export default function ConfiguracoesPage() {
               ) : (
                 <input
                   id={field.id}
+                  type={field.type || "text"}
+                  min={field.type === "number" ? 5 : undefined}
+                  step={field.type === "number" ? 5 : undefined}
                   value={form[field.id]}
                   onChange={(event) => {
                     if (field.id === "name") {
@@ -311,6 +388,36 @@ export default function ConfiguracoesPage() {
             </label>
           ))}
         </div>
+
+        <fieldset className="mt-5 rounded-lg border border-ink/10 bg-cloud p-4">
+          <legend className="px-1 text-sm font-bold text-ink/70">
+            Dias atendidos para agendamento
+          </legend>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+            {workingDayOptions.map((day) => {
+              const checked = form.workingDays.includes(day.value);
+
+              return (
+                <label
+                  key={day.value}
+                  className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold transition ${
+                    checked
+                      ? "border-moss bg-mint text-moss"
+                      : "border-ink/10 bg-white text-ink/60"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleWorkingDay(day.value)}
+                    className="accent-moss"
+                  />
+                  {day.label}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
 
         {(successMessage || errorMessage || savedCompanyId) && (
           <div className="mt-6 space-y-3">

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isAppointmentTime } from "@/lib/appointmentSlots";
+import { getCompanyAppointmentTimes } from "@/lib/companySchedule";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 type AppointmentRequest = {
@@ -63,12 +63,27 @@ export async function POST(request: Request) {
   const appointmentTime = getStringValue(body.appointmentTime);
   const notes = getStringValue(body.notes) || null;
 
-  if (!isAppointmentTime(appointmentTime)) {
-    return buildErrorResponse("Selecione um horario disponivel.", 400);
-  }
-
   try {
     const supabase = getSupabaseClient();
+    const { data: company, error: companyError } = await supabase
+      .from("companies")
+      .select("opening_time, closing_time, slot_interval_minutes, working_days")
+      .eq("id", companyId)
+      .maybeSingle();
+
+    if (companyError) {
+      console.error("Failed to load company schedule:", companyError.message);
+      return buildErrorResponse("Nao foi possivel validar a agenda da empresa.");
+    }
+
+    if (!company) {
+      return buildErrorResponse("Empresa nao encontrada.", 404);
+    }
+
+    if (!getCompanyAppointmentTimes(company, appointmentDate).includes(appointmentTime)) {
+      return buildErrorResponse("Selecione um horario disponivel.", 400);
+    }
+
     const { data: occupiedAppointments, error: availabilityError } = await supabase
       .from("appointments")
       .select("id")

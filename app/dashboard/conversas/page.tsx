@@ -49,12 +49,34 @@ export default function ConversasPage() {
 
       try {
         const supabase = getSupabaseClient();
+        const { data: userData } = await supabase.auth.getUser();
+
+        if (!userData.user) {
+          throw new Error("Sessao expirada. Entre novamente.");
+        }
+
+        const { data: userCompanies, error: companiesError } = await supabase
+          .from("companies")
+          .select("id")
+          .eq("user_id", userData.user.id);
+
+        if (companiesError) {
+          throw companiesError;
+        }
+
+        const companyIds = (userCompanies || []).map((company) => company.id);
+
+        if (companyIds.length === 0) {
+          setConversations([]);
+          return;
+        }
 
         const responseWithCompany = await supabase
           .from("conversations")
           .select(
             "id, company_id, customer_message, ai_response, created_at, companies(name)"
           )
+          .in("company_id", companyIds)
           .order("created_at", { ascending: false });
 
         if (!responseWithCompany.error) {
@@ -70,6 +92,7 @@ export default function ConversasPage() {
         const responseWithoutCompany = await supabase
           .from("conversations")
           .select("id, company_id, customer_message, ai_response, created_at")
+          .in("company_id", companyIds)
           .order("created_at", { ascending: false });
 
         if (responseWithoutCompany.error) {

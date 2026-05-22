@@ -10,9 +10,18 @@ export function LatestCompanyCard() {
     async function loadCompany() {
       try {
         const supabase = getSupabaseClient();
+        const { data: userData } = await supabase.auth.getUser();
+
+        if (!userData.user) {
+          throw new Error("Sessao expirada.");
+        }
+
         const { data, error } = await supabase
           .from("companies")
-          .select("id, name, slug, business_info, city, state, tone, whatsapp, created_at")
+          .select(
+            "id, user_id, name, slug, business_info, city, state, opening_time, closing_time, slot_interval_minutes, working_days, tone, whatsapp, created_at"
+          )
+          .eq("user_id", userData.user.id)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();

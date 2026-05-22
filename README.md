@@ -154,6 +154,7 @@ Campos esperados:
 | Campo | Tipo sugerido | Observação |
 | --- | --- | --- |
 | `id` | `uuid` | Primary key, default `gen_random_uuid()` |
+| `user_id` | `uuid` | Usuário dono da empresa |
 | `name` | `text` | Nome da empresa |
 | `business_info` | `text` | Informações organizadas da empresa |
 | `city` | `text` | Cidade da empresa |
