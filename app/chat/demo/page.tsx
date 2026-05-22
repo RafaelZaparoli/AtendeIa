@@ -112,6 +112,7 @@ export function ChatExperience({
   const [loadingTimes, setLoadingTimes] = useState(false);
   const [timeSlots, setTimeSlots] = useState<AvailabilityTime[]>([]);
   const [timeSlotsDate, setTimeSlotsDate] = useState("");
+  const [availabilityMessage, setAvailabilityMessage] = useState("");
   const [availabilityError, setAvailabilityError] = useState("");
   const [appointmentMessage, setAppointmentMessage] = useState("");
   const [appointmentError, setAppointmentError] = useState("");
@@ -149,6 +150,7 @@ export function ChatExperience({
       const trimmedCompanyId = companyId.trim();
       const date = selectedDate;
 
+      setAvailabilityMessage("");
       setAvailabilityError("");
 
       if (!isAppointmentOpen || !date) {
@@ -174,6 +176,7 @@ export function ChatExperience({
           date?: string;
           times?: AvailabilityTime[];
           error?: string;
+          message?: string;
         };
 
         if (!response.ok) {
@@ -186,6 +189,7 @@ export function ChatExperience({
 
         setTimeSlots(data.times);
         setTimeSlotsDate(data.date || date);
+        setAvailabilityMessage(data.message || "");
       } catch (error) {
         console.error("Failed to load appointment availability:", error);
         setAvailabilityError(
@@ -359,6 +363,7 @@ export function ChatExperience({
       setSelectedTime("");
       setTimeSlots([]);
       setTimeSlotsDate("");
+      setAvailabilityMessage("");
       setMessages((currentMessages) => [
         ...currentMessages,
         {
@@ -596,6 +601,7 @@ export function ChatExperience({
                     onChange={(event) => {
                       setSelectedDate(event.target.value);
                       setSelectedTime("");
+                      setAvailabilityMessage("");
                       setAvailabilityError("");
                     }}
                     className="mt-2 min-h-11 w-full rounded-md border border-ink/10 bg-cloud px-4 text-sm outline-none transition focus:border-moss focus:bg-white"
@@ -623,7 +629,8 @@ export function ChatExperience({
                     !loadingTimes &&
                     !availabilityError && (
                       <p className="mt-2 rounded-md border border-coral/30 bg-coral/10 px-4 py-3 text-sm font-semibold text-ink">
-                        Não há horários disponíveis para esta data. Escolha outro dia.
+                        {availabilityMessage ||
+                          "Não há horários disponíveis para esta data. Escolha outro dia."}
                       </p>
                     )}
                   {timeSlotsDate === selectedDate &&

@@ -26,6 +26,11 @@ type ScheduleCompany = Pick<
   "opening_time" | "closing_time" | "slot_interval_minutes" | "working_days"
 >;
 
+export type CompanyAppointmentSchedule = {
+  times: string[];
+  reason?: "closed_day" | "invalid_date" | "invalid_schedule";
+};
+
 function readMinutes(value: string | null) {
   if (!value) {
     return null;
@@ -64,7 +69,10 @@ function readWeekday(date: string) {
   return weekdaysByIndex[parsedDate.getUTCDay()];
 }
 
-export function getCompanyAppointmentTimes(company: ScheduleCompany, date: string) {
+export function getCompanyAppointmentSchedule(
+  company: ScheduleCompany,
+  date: string
+): CompanyAppointmentSchedule {
   const weekday = readWeekday(date);
   const rawWorkingDays = company.working_days?.length
     ? company.working_days
@@ -81,8 +89,18 @@ export function getCompanyAppointmentTimes(company: ScheduleCompany, date: strin
     return day;
   });
 
-  if (!weekday || !workingDays.includes(weekday)) {
-    return [];
+  if (!weekday) {
+    return {
+      times: [],
+      reason: "invalid_date"
+    };
+  }
+
+  if (!workingDays.includes(weekday)) {
+    return {
+      times: [],
+      reason: "closed_day"
+    };
   }
 
   const openingMinutes = readMinutes(company.opening_time || "09:00");
@@ -97,7 +115,10 @@ export function getCompanyAppointmentTimes(company: ScheduleCompany, date: strin
     interval < 5 ||
     interval > 480
   ) {
-    return [];
+    return {
+      times: [],
+      reason: "invalid_schedule"
+    };
   }
 
   const times: string[] = [];
@@ -110,5 +131,9 @@ export function getCompanyAppointmentTimes(company: ScheduleCompany, date: strin
     times.push(formatMinutes(currentTime));
   }
 
-  return times;
+  return { times };
+}
+
+export function getCompanyAppointmentTimes(company: ScheduleCompany, date: string) {
+  return getCompanyAppointmentSchedule(company, date).times;
 }
