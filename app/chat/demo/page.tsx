@@ -391,12 +391,14 @@ export function ChatExperience({
           <Link href="/" className="text-xl font-black tracking-tight">
             AtendeAI
           </Link>
-          <Link
-            href="/dashboard"
-            className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white"
-          >
-            Entrar no painel
-          </Link>
+          {!isPublicCompanyChat && (
+            <Link
+              href="/dashboard"
+              className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white"
+            >
+              Entrar no painel
+            </Link>
+          )}
         </div>
       </header>
 
